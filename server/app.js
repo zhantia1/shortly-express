@@ -16,35 +16,19 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser);
 app.use(Auth.createSession);
-//app.use(Auth.verifySession);
 app.use(express.static(path.join(__dirname, '../public')));
 
 
 
-var assignSessionObject = (request, userId, username, hash) => {
-  if (!request.session) {
-    request.session = {};
-  }
-  request.session.userId = userId;
-  request.session.hash = hash;
-  request.session.user = {username};
-  return true;
-};
-
-
-
-app.get('/', Auth.verifySession, 
-(req, res) => {
+app.get('/', Auth.verifySession, (req, res) => {
   res.render('index');
 });
 
-app.get('/create', Auth.verifySession,
-(req, res) => {
+app.get('/create', Auth.verifySession, (req, res) => {
   res.render('index');
 });
 
-app.get('/links', Auth.verifySession,
-(req, res, next) => {
+app.get('/links', Auth.verifySession, (req, res, next) => {
   models.Links.getAll()
     .then(links => {
       res.status(200).send(links);
@@ -54,10 +38,8 @@ app.get('/links', Auth.verifySession,
     });
 });
 
-app.post('/links', Auth.verifySession,
-(req, res, next) => {
+app.post('/links', Auth.verifySession, (req, res, next) => {
   var url = req.body.url;
-  console.log(url);
   if (!models.Links.isValidUrl(url)) {
     // send back a 404 if link is not valid
     return res.sendStatus(404);
@@ -81,7 +63,6 @@ app.post('/links', Auth.verifySession,
       return models.Links.get({ id: results.insertId });
     })
     .then(link => {
-      // console.log(link);
       throw link;
     })
     .error(error => {
@@ -95,53 +76,48 @@ app.post('/links', Auth.verifySession,
 app.post('/signup', (req, res, next) => {
   models.Users.create(req.body)
     .then(({insertId}) => models.Sessions.update({hash: req.cookies.shortlyid}, {userId: insertId}))
-    .then(() => {
-      return models.Users.get({username: req.body.username});
-    })
-    .then((userObj) => {
-      assignSessionObject(req, userObj.id, userObj.username, req.cookies.shortlyid);
-      return;
-    })
     .then(() => res.status(201).redirect('/'))
-    .catch((err) => {console.log('SIGNUP ERR', err); res.status(400).redirect('/signup')});
+    .catch(() => res.status(400).redirect('/signup'));
 });
 
 app.post('/login', (req, res, next) => {
-  console.log('REQUESTBODYLOGIN:', req.body);
   models.Users.get({username: req.body.username})
     .then(userObj => {
-      //console.log(userObj);
       if (models.Users.compare(req.body.password, userObj.password, userObj.salt)) {
         models.Sessions.update({hash: req.cookies.shortlyid}, {userId: userObj.id})
-          .then(() => assignSessionObject(req, userObj.id, req.body.username, req.cookies.shortlyid))
-          //.then((data) => {console.log('SESSION DATA2:', data); Object.assign(req.session, data)})
-          .then(() => res.status(201).redirect('/'));
+          .then(() => res.status(201).redirect('/'))
+          .catch((err) => console.log('uh-oh, login error', err));
       } else {
         res.status(400).redirect('/login');
       }
-      return userObj;
     })
-    .catch((err) => {console.log("caught", err); res.status(400).redirect('/login');});
+    .catch(() => res.status(400).redirect('/login'));
 });
 
 app.get('/logout', (req, res, next) => {
-  models.Sessions.delete({hash: req.cookies.shortlyid})
-    .then(() => res.cookie('shortlyid', '').status(200).redirect('/'));
+  let hash = req.cookies.shortlyid;
+  delete req.session;
+  req.cookies.shortlyid = '';
+  models.Sessions.delete({hash})
+    .then(() => {
+      res.cookie('shortlyid', '').status(200).redirect('/');
+      console.log('right before the logout', hash);
+      console.log('after logout reqcookies', req.cookies);
+    });
 });
-/************************************************************/
-// Write your authentication routes here
-/************************************************************/
-
-
 
 app.get('/login', (req, res, next) => {
-  console.log('LOGIN COOKIE:', req.cookies);
   res.render('login');
 });
 
 app.get('/signup', (req, res, next) => {
   res.render('signup');
 });
+/************************************************************/
+// Write your authentication routes here
+/************************************************************/
+
+
 
 /************************************************************/
 // Handle the code parameter route last - if all other routes fail
