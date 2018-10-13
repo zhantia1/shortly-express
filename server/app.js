@@ -21,6 +21,18 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 
 
+var assignSessionObject = (request, userId, username, hash) => {
+  if (!request.session) {
+    request.session = {};
+  }
+  request.session.userId = userId;
+  request.session.hash = hash;
+  request.session.user = {username};
+  return true;
+};
+
+
+
 app.get('/', Auth.verifySession, 
 (req, res) => {
   res.render('index');
@@ -87,30 +99,29 @@ app.post('/signup', (req, res, next) => {
       return models.Users.get({username: req.body.username});
     })
     .then((userObj) => {
-      Object.assign(req.session, userObj);
-      // console.log(req.session);
-      return req.session;
+      assignSessionObject(req, userObj.id, userObj.username, req.cookies.shortlyid);
+      return;
     })
     .then(() => res.status(201).redirect('/'))
-    .catch(() => res.status(400).redirect('/signup'));
+    .catch((err) => {console.log('SIGNUP ERR', err); res.status(400).redirect('/signup')});
 });
 
 app.post('/login', (req, res, next) => {
-  console.log(req.body);
+  console.log('REQUESTBODYLOGIN:', req.body);
   models.Users.get({username: req.body.username})
     .then(userObj => {
-      console.log(userObj);
+      //console.log(userObj);
       if (models.Users.compare(req.body.password, userObj.password, userObj.salt)) {
-        model.Sessions.update({hash: req.cookies.shortlyid}, {userId: userObj.id})
-          .then(() => model.Sessions.get({hash: req.cookies.shortlyid}))
-          .then((data) => console.log(data))
+        models.Sessions.update({hash: req.cookies.shortlyid}, {userId: userObj.id})
+          .then(() => assignSessionObject(req, userObj.id, req.body.username, req.cookies.shortlyid))
+          //.then((data) => {console.log('SESSION DATA2:', data); Object.assign(req.session, data)})
           .then(() => res.status(201).redirect('/'));
       } else {
         res.status(400).redirect('/login');
       }
       return userObj;
     })
-    .catch(() => res.status(400).redirect('/login'));
+    .catch((err) => {console.log("caught", err); res.status(400).redirect('/login');});
 });
 
 app.get('/logout', (req, res, next) => {
@@ -121,7 +132,10 @@ app.get('/logout', (req, res, next) => {
 // Write your authentication routes here
 /************************************************************/
 
+
+
 app.get('/login', (req, res, next) => {
+  console.log('LOGIN COOKIE:', req.cookies);
   res.render('login');
 });
 
