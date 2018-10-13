@@ -17,6 +17,7 @@ module.exports.createSession = (req, res, next) => {
     models.Sessions.get({'hash': req.cookies.shortlyid})
       .then((sessionData) => {
         req.session = sessionData;
+        console.log(sessionData);
         next();
       })
       .catch(() => {
@@ -29,4 +30,8 @@ module.exports.createSession = (req, res, next) => {
 /************************************************************/
 // Add additional authentication middleware functions below
 /************************************************************/
-
+module.exports.verifySession = (req, res, next) => {
+  //console.log(req);
+  models.Sessions.isLoggedIn(req.session) ? next() : res.status(400).redirect('/login');
+  
+};

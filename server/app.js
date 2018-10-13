@@ -16,21 +16,22 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser);
 app.use(Auth.createSession);
+//app.use(Auth.verifySession);
 app.use(express.static(path.join(__dirname, '../public')));
 
 
 
-app.get('/', 
+app.get('/', Auth.verifySession, 
 (req, res) => {
   res.render('index');
 });
 
-app.get('/create', 
+app.get('/create', Auth.verifySession,
 (req, res) => {
   res.render('index');
 });
 
-app.get('/links', 
+app.get('/links', Auth.verifySession,
 (req, res, next) => {
   models.Links.getAll()
     .then(links => {
@@ -41,9 +42,10 @@ app.get('/links',
     });
 });
 
-app.post('/links', 
+app.post('/links', Auth.verifySession,
 (req, res, next) => {
   var url = req.body.url;
+  console.log(url);
   if (!models.Links.isValidUrl(url)) {
     // send back a 404 if link is not valid
     return res.sendStatus(404);
@@ -67,6 +69,7 @@ app.post('/links',
       return models.Links.get({ id: results.insertId });
     })
     .then(link => {
+      // console.log(link);
       throw link;
     })
     .error(error => {
@@ -80,18 +83,32 @@ app.post('/links',
 app.post('/signup', (req, res, next) => {
   models.Users.create(req.body)
     .then(({insertId}) => models.Sessions.update({hash: req.cookies.shortlyid}, {userId: insertId}))
+    .then(() => {
+      return models.Users.get({username: req.body.username});
+    })
+    .then((userObj) => {
+      Object.assign(req.session, userObj);
+      // console.log(req.session);
+      return req.session;
+    })
     .then(() => res.status(201).redirect('/'))
     .catch(() => res.status(400).redirect('/signup'));
 });
 
 app.post('/login', (req, res, next) => {
+  console.log(req.body);
   models.Users.get({username: req.body.username})
     .then(userObj => {
+      console.log(userObj);
       if (models.Users.compare(req.body.password, userObj.password, userObj.salt)) {
-        res.status(201).redirect('/');
+        model.Sessions.update({hash: req.cookies.shortlyid}, {userId: userObj.id})
+          .then(() => model.Sessions.get({hash: req.cookies.shortlyid}))
+          .then((data) => console.log(data))
+          .then(() => res.status(201).redirect('/'));
       } else {
         res.status(400).redirect('/login');
       }
+      return userObj;
     })
     .catch(() => res.status(400).redirect('/login'));
 });
@@ -104,7 +121,13 @@ app.get('/logout', (req, res, next) => {
 // Write your authentication routes here
 /************************************************************/
 
+app.get('/login', (req, res, next) => {
+  res.render('login');
+});
 
+app.get('/signup', (req, res, next) => {
+  res.render('signup');
+});
 
 /************************************************************/
 // Handle the code parameter route last - if all other routes fail
