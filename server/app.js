@@ -5,6 +5,7 @@ const partials = require('express-partials');
 const bodyParser = require('body-parser');
 const Auth = require('./middleware/auth');
 const models = require('./models');
+const cookieParser = require('./middleware/cookieParser');
 
 const app = express();
 
@@ -13,6 +14,8 @@ app.set('view engine', 'ejs');
 app.use(partials());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(cookieParser);
+app.use(Auth.createSession);
 app.use(express.static(path.join(__dirname, '../public')));
 
 
@@ -74,6 +77,29 @@ app.post('/links',
     });
 });
 
+app.post('/signup', (req, res, next) => {
+  models.Users.create(req.body)
+    .then(({insertId}) => models.Sessions.update({hash: req.cookies.shortlyid}, {userId: insertId}))
+    .then(() => res.status(201).redirect('/'))
+    .catch(() => res.status(400).redirect('/signup'));
+});
+
+app.post('/login', (req, res, next) => {
+  models.Users.get({username: req.body.username})
+    .then(userObj => {
+      if (models.Users.compare(req.body.password, userObj.password, userObj.salt)) {
+        res.status(201).redirect('/');
+      } else {
+        res.status(400).redirect('/login');
+      }
+    })
+    .catch(() => res.status(400).redirect('/login'));
+});
+
+app.get('/logout', (req, res, next) => {
+  models.Sessions.delete({hash: req.cookies.shortlyid})
+    .then(() => res.cookie('shortlyid', '').status(200).redirect('/'));
+});
 /************************************************************/
 // Write your authentication routes here
 /************************************************************/
